@@ -43,26 +43,49 @@ def getting_info(message):
 def date_step1(message):
     try:
         given_date = parse(message.text)
-        given_date = datetime.strptime(message.text, '%d-%m-%Y')
+        given_date = datetime.strptime(message.text, '%d.%m.%Y')
         
-        if given_date < datetime.now():
+        if given_date < datetime.today():
             raise SyntaxError('given date is earlier than now.')
         
-        if given_date > datetime.now() + timedelta(days=731):
+        if given_date > datetime.today() + timedelta(days=731):
             raise SyntaxError('given date is much later than now.')
         
         bot.send_message(message.chat.id, 'Дата введена.')
-        bot.send_message(message.chat.id, posts.new_task_text_instruction2)
-        bot.register_next_step_handler(message, title_step2, date)
+        bot.send_message(message.chat.id, posts.new_task_text_instruction1_1)
+        bot.register_next_step_handler(message, time_step1_1, date)
     
     except ValueError:
-        bot.send_message(message.chat.id, 'Не верный формат даты, необходимо ДД-ММ-ГГГГ.')
+        bot.send_message(message.chat.id, 'Не верный формат даты, необходимо ДД.ММ.ГГГГ.')
         bot.register_next_step_handler(message, date_step1)
     
     except SyntaxError:
         bot.send_message(message.chat.id, 'Дата раньше настоящей или дата значительно позже предусмотернной. Проверьте правильность ввода и попробуйте снова.')
         bot.register_next_step_handler(message, date_step1)
 
+def time_step1_1(message, data):   
+    try:        
+        hours = int(message.text[0:2])
+        minutes = int(message.text[3:5])
+        
+        if hours < 0 or hours > 24 or minutes < 0 or minutes > 60:
+            raise ValueError('hours or minutes are out of possible range')
+        
+        new_data = datetime(int(data.year), int(data.month), int(data.day), hours, minutes)
+        
+        bot.send_message(message.chat.id, 'Время введено.')
+        bot.send_message(message.chat.id, posts.new_task_text_instruction2)
+        bot.register_next_step_handler(message, title_step2, new_data)
+        
+    except ValueError:
+        bot.send_message(message.chat.id, 'Введите время без ошибок (часы в диапазоне от 0 до 24, минуты в диапазоне от 0 до 60).')
+        bot.register_next_step_handler(message, time_step1_1, data)
+    
+    except TypeError:
+        bot.send_message(message.chat.id, 'Введите данные согласно шаблону.')
+        bot.register_next_step_handler(message, time_step1_1, data)
+
+    
 def title_step2(message, date):
     if message.content_type == 'text':
         markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
@@ -91,8 +114,14 @@ def notes_step3(message, date, title):
          
 def media_step4(message, date, title):
     task = pg_db.Task(date, title=title, chatID=message.chat.id)
+    
     bot.send_message(message.chat.id, posts.new_task_text_instruction5)
     bot.register_next_step_handler(message, saving_step5, task)        
+
+# Функции ввода дополнительных файлов
+def input_json_files(message):
+    pass
+
 
 def saving_step5(message, task_obj):
     task_obj.console_print()
