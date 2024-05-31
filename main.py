@@ -1,7 +1,7 @@
 # внешние библиотеки
 import telebot
-import telebot_calendar
-from datetime import datetime, date, timedelta
+from telegram_bot_calendar import DetailedTelegramCalendar, LSTEP
+from datetime import datetime, date, time, timedelta
 from dateutil.parser import parse
 
 # доп. библиотеки
@@ -37,41 +37,43 @@ def getting_info(message):
 @bot.message_handler(commands=['new_task'])
 def getting_info(message):
     # уведомляем о начале заполнения карточки задачи
+    
+    calendar, step = DetailedTelegramCalendar(min_date=date.today(), locale="ru").build()
     bot.send_message(message.chat.id, posts.new_task_text_instruction1, parse_mode="Markdown")
-    bot.register_next_step_handler(message, date_step1)
+    bot.send_message(message.chat.id, 'Введите год', reply_markup=calendar)
 
-def date_step1(message):
-    try:
-        given_date = parse(message.text)
-        given_date = datetime.strptime(message.text, '%d.%m.%Y')
-        
-        if given_date < datetime.today():
-            raise SyntaxError('given date is earlier than now.')
-        
-        if given_date > datetime.today() + timedelta(days=731):
-            raise SyntaxError('given date is much later than now.')
-        
-        bot.send_message(message.chat.id, 'Дата введена.')
-        bot.send_message(message.chat.id, posts.new_task_text_instruction1_1)
-        bot.register_next_step_handler(message, time_step1_1, date)
+@bot.callback_query_handler(func=DetailedTelegramCalendar.func())
+def cal(с):
     
-    except ValueError:
-        bot.send_message(message.chat.id, 'Не верный формат даты, необходимо ДД.ММ.ГГГГ.')
-        bot.register_next_step_handler(message, date_step1)
-    
-    except SyntaxError:
-        bot.send_message(message.chat.id, 'Дата раньше настоящей или дата значительно позже предусмотернной. Проверьте правильность ввода и попробуйте снова.')
-        bot.register_next_step_handler(message, date_step1)
+    result, key, step = DetailedTelegramCalendar().process(с.data)
+    if not result and key:
+        step_ru = ""
+        if LSTEP[step] == "year":
+            step_ru = 'год'
+        elif LSTEP[step] == "month":
+            step_ru = 'месяц'
+        elif LSTEP[step] == "day":
+            step_ru = 'день'    
+        bot.edit_message_text(f"Выберите {step_ru}",
+                              с.message.chat.id,
+                              с.message.message_id,
+                              reply_markup=key)
+    elif result:
+        bot.edit_message_text(f"Введена дата: {result}",
+                              с.message.chat.id,
+                              с.message.message_id)
+        bot.send_message(с.message.chat.id, posts.new_task_text_instruction1_1)
+        bot.register_next_step_handler(с.message, time_step1_1, result)
+        
 
 def time_step1_1(message, data):   
     try:        
-        hours = int(message.text[0:2])
-        minutes = int(message.text[3:5])
+        hours, minutes = int(message.text.split(':')[0]), int(message.text.split(':')[1])
         
         if hours < 0 or hours > 24 or minutes < 0 or minutes > 60:
             raise ValueError('hours or minutes are out of possible range')
         
-        new_data = datetime(int(data.year), int(data.month), int(data.day), hours, minutes)
+        new_data = datetime.combine(data, time(hour=hours, minute=minutes))
         
         bot.send_message(message.chat.id, 'Время введено.')
         bot.send_message(message.chat.id, posts.new_task_text_instruction2)
